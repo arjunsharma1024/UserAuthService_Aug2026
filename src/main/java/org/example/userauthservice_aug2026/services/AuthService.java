@@ -1,11 +1,17 @@
 package org.example.userauthservice_aug2026.services;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.MacAlgorithm;
 import org.antlr.v4.runtime.misc.Pair;
+import org.apache.kafka.clients.KafkaClient;
+import org.apache.kafka.common.network.KafkaChannel;
+import org.example.userauthservice_aug2026.clients.KafkaProducerClient;
+import org.example.userauthservice_aug2026.dtos.EmailDto;
 import org.example.userauthservice_aug2026.exceptions.PasswordMismatchException;
 import org.example.userauthservice_aug2026.exceptions.UserAlreadyExistException;
 import org.example.userauthservice_aug2026.exceptions.UserNotRegisteredException;
@@ -42,6 +48,12 @@ public class AuthService implements IAuthService {
     @Autowired
     private SecretKey secretKey;
 
+    @Autowired
+    private KafkaProducerClient kafkaProducerClient;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Override
     public User signup(String name, String email, String password, String phoneNumber) {
         Optional<User> userOptional = userRepo.findByEmail(email);
@@ -73,6 +85,20 @@ public class AuthService implements IAuthService {
         List<Role> roleList = new ArrayList<>();
         roleList.add(role);
         user.setRoles(roleList);
+
+        /// Putting a message into Kafka
+        EmailDto emailDto  = new EmailDto();
+        emailDto.setTo(email);
+        emailDto.setFrom("anuragonhiring@gmail.com");
+        emailDto.setSubject("Welcome to Scaler");
+        emailDto.setBody("Hey "+name+", Have a good learning experience");
+        try {
+            String message = objectMapper.writeValueAsString(emailDto);
+            kafkaProducerClient.sendMessage("signup", message);
+        }catch (JsonProcessingException exception) {
+            throw new RuntimeException(exception.getMessage());
+        }
+        //////////////////////////////
 
         return userRepo.save(user);
     }
